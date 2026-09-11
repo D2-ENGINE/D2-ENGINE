@@ -89,18 +89,18 @@
 
     <div class="input-group">
       <label for="apiUrl">Google Apps Script Web App Endpoint URL:</label>
-      <input type="text" id="apiUrl" placeholder="วาง Web App URL ของคุณที่นี่..." />
+      <input type="text" id="apiUrl" value="https://script.google.com/macros/s/AKfycbyGbHpOyDcIO1lm5CxGRz0pVWFphkJ3b05l-2gTf03KggLG1XGEUcYhKDmbmMr0GaPn/exec" placeholder="วาง Web App URL ของคุณที่นี่..." />
     </div>
 
     <button class="btn-fetch" onclick="fetchGeoJSONData()">Fetch Engine Stream Data</button>
   </div>
 
   <script>
-    // Initialize Map on Dark Mode CartoDB Tile Layer
+    // Initialize Map on OpenStreetMap Tile Layer (Free & No API Key Required)
     const map = L.map('map').setView([16.1852, 103.3012], 12);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: 'IDCHI v5.2 | &copy; CartoDB'
+      attribution: 'IDCHI v5.2 | &copy; OpenStreetMap contributors'
     }).addTo(map);
 
     let geoJsonLayerGroup = L.layerGroup().addTo(map);
