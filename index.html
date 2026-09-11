@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D² Engine Architecture (IDCHI v5.2) - 3D/2D GIS Twin Dashboard</title>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #121212; color: #ffffff; }
+
+    #map { width: 100%; height: 100vh; position: absolute; z-index: 1; }
+
+    /* Control Panel UI Overlay */
+    .dashboard-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      z-index: 1000;
+      width: 360px;
+      background: rgba(20, 20, 20, 0.85);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    }
+
+    .header-title { font-size: 1.1rem; font-weight: 700; letter-spacing: 0.5px; color: #4fc3f7; margin-bottom: 4px; }
+    .header-sub { font-size: 0.75rem; color: #aaa; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; }
+
+    .status-badge {
+      display: inline-block;
+      width: 100%;
+      padding: 10px;
+      border-radius: 6px;
+      text-align: center;
+      font-weight: 800;
+      font-size: 1rem;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .state-DRY { background: #1b5e20; color: #81c784; border: 1px solid #2e7d32; }
+    .state-PRE_WARNING { background: #e65100; color: #ffb74d; border: 1px solid #f57c00; }
+    .state-CRITICAL_FLOOD { background: #b71c1c; color: #e57373; border: 1px solid #d32f2f; }
+    .state-POLDER_ACTIVE { background: #4a148c; color: #ba68c8; border: 1px solid #7b1fa2; animation: pulse 1.5s infinite; }
+
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .metric-card { background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 8px; }
+    .metric-label { font-size: 0.7rem; color: #888; text-transform: uppercase; }
+    .metric-val { font-size: 1.1rem; font-weight: 600; color: #fff; margin-top: 2px; }
+
+    .input-group { margin-bottom: 12px; }
+    .input-group label { display: block; font-size: 0.75rem; color: #aaa; margin-bottom: 4px; }
+    .input-group input {
+      width: 100%; padding: 8px 12px; background: rgba(0,0,0,0.5); border: 1px solid #444; border-radius: 6px; color: #fff; outline: none;
+    }
+
+    .btn-fetch {
+      width: 100%; padding: 10px; background: #0288d1; border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer; transition: 0.2s;
+    }
+    .btn-fetch:hover { background: #039be5; }
+  </style>
+</head>
+<body>
+
+  <div id="map"></div>
+
+  <div class="dashboard-panel">
+    <div class="header-title">IDCHI v5.2 DATA TWIN</div>
+    <div class="header-sub">Deterministic Hydro-Physics Engine Dashboard</div>
+
+    <div id="fsmBadge" class="status-badge state-DRY">STATE: LOADING...</div>
+
+    <div class="metric-grid">
+      <div class="metric-card"><div class="metric-label">Discharge</div><div class="metric-val" id="valDischarge">0.0 m³/s</div></div>
+      <div class="metric-card"><div class="metric-label">Water Level</div><div class="metric-val" id="valWaterLevel">0.0 m</div></div>
+      <div class="metric-card"><div class="metric-label">Flood Depth</div><div class="metric-val" id="valFloodDepth">0.0 m</div></div>
+      <div class="metric-card"><div class="metric-label">LCL Altitude</div><div class="metric-val" id="valLcl">0.0 m</div></div>
+    </div>
+
+    <div class="input-group">
+      <label for="apiUrl">Google Apps Script Web App Endpoint URL:</label>
+      <input type="text" id="apiUrl" placeholder="วาง Web App URL ของคุณที่นี่..." />
+    </div>
+
+    <button class="btn-fetch" onclick="fetchGeoJSONData()">Fetch Engine Stream Data</button>
+  </div>
+
+  <script>
+    // Initialize Map on Dark Mode CartoDB Tile Layer
+    const map = L.map('map').setView([16.1852, 103.3012], 12);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      attribution: 'IDCHI v5.2 | &copy; CartoDB'
+    }).addTo(map);
+
+    let geoJsonLayerGroup = L.layerGroup().addTo(map);
+
+    async function fetchGeoJSONData() {
+      const urlInput = document.getElementById('apiUrl').value.trim();
+      if (!urlInput) {
+        alert('กรุณาใส่ Web App URL ของ Google Apps Script');
+        return;
+      }
+
+      // Ensure output=json param
+      const targetUrl = urlInput.includes('?') 
+        ? `${urlInput}&output=json` 
+        : `${urlInput}?output=json`;
+
+      try {
+        const res = await fetch(targetUrl);
+        const data = await res.json();
+        
+        renderDashboard(data);
+      } catch (err) {
+        console.error("API Fetch Error:", err);
+        alert("ไม่สามารถดึงข้อมูล GeoJSON ได้ ตรวจสอบ URL หรือสิทธิ์การเข้าถึง (Anyone)");
+      }
+    }
+
+    function renderDashboard(geoJsonData) {
+      geoJsonLayerGroup.clearLayers();
+
+      // Update FSM Status UI
+      const fsmState = geoJsonData.fsm_status ? geoJsonData.fsm_status.state : "DRY";
+      const fsmBadge = document.getElementById('fsmBadge');
+      fsmBadge.className = `status-badge state-${fsmState}`;
+      fsmBadge.innerText = `STATE: ${fsmState}`;
+
+      // Render GeoJSON Features
+      const layer = L.geoJSON(geoJsonData, {
+        style: function(feature) {
+          if (feature.geometry.type === 'Polygon') {
+            return { color: '#ff9800', weight: 2, fillColor: '#ffb74d', fillOpacity: 0.35 };
+          }
+          if (feature.geometry.type === 'LineString') {
+            return { color: '#0288d1', weight: 5, opacity: 0.8 };
+          }
+        },
+        pointToLayer: function(feature, latlng) {
+          return L.circleMarker(latlng, {
+            radius: 8,
+            fillColor: "#e91e63",
+            color: "#ffffff",
+            weight: 2,
+            fillOpacity: 0.9
+          });
+        },
+        onEachFeature: function(feature, layer) {
+          let p = feature.properties;
+          let popupContent = `<b>${feature.name || p.patent_tag || 'D² Feature'}</b><br>`;
+          for (let key in p) {
+            popupContent += `<span style="font-size:11px;"><b>${key}:</b> ${p[key]}</span><br>`;
+          }
+          layer.bindPopup(popupContent);
+
+          // Update Card Metrics from Properties
+          if (p.discharge_cms) document.getElementById('valDischarge').innerText = `${p.discharge_cms} m³/s`;
+          if (p.water_level_m) document.getElementById('valWaterLevel').innerText = `${p.water_level_m} m`;
+          if (p.flood_depth_m) document.getElementById('valFloodDepth').innerText = `${p.flood_depth_m} m`;
+          if (p.lcl_altitude_m) document.getElementById('valLcl').innerText = `${p.lcl_altitude_m} m`;
+        }
+      });
+
+      geoJsonLayerGroup.addLayer(layer);
+      if (layer.getBounds().isValid()) {
+        map.fitBounds(layer.getBounds(), { padding: [50, 50] });
+      }
+    }
+  </script>
+</body>
+</html>
