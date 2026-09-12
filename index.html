@@ -15,7 +15,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>D² Engine Architecture (IDCHI v5.2) - 3D/2D GIS Twin Dashboard</title>
+  <title>D² ENGINE - 3D/2D GIS Twin Dashboard</title>
 
   <!-- Leaflet CSS & JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -112,7 +112,7 @@
     const map = L.map('map').setView([16.1852, 103.3012], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: 'IDCHI v5.2 | &copy; OpenStreetMap contributors'
+      attribution: 'D² ENGINE | &copy; OpenStreetMap contributors'
     }).addTo(map);
 
     let geoJsonLayerGroup = L.layerGroup().addTo(map);
